@@ -91,12 +91,38 @@ async def check_geo(ip, session, semaphore):
 async def save_proxies(proxies, filename):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     with open(filename, 'w') as f:
-        for proxy in proxies:
-            f.write(f"{proxy}\n")
+        if not proxies:
+            f.write("No valid proxies found.\n")
+        else:
+            for proxy in proxies:
+                f.write(f"{proxy}\n")
     logger.info(f"Saved {len(proxies)} proxies to {filename}")
 
+async def initialize_dirs():
+    """Buat folder result/ dan result/ID/ jika belum ada."""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(ID_DIR, exist_ok=True)
+    # Buat file kosong default untuk mencegah error git add
+    for filename in [
+        os.path.join(OUTPUT_DIR, "all_validproxies.txt"),
+        os.path.join(OUTPUT_DIR, "http_validproxies.txt"),
+        os.path.join(OUTPUT_DIR, "socks4_validproxies.txt"),
+        os.path.join(OUTPUT_DIR, "socks5_validproxies.txt"),
+        os.path.join(ID_DIR, "ID-all_validproxies.txt"),
+        os.path.join(ID_DIR, "ID-http_validproxies.txt"),
+        os.path.join(ID_DIR, "ID-socks4_validproxies.txt"),
+        os.path.join(ID_DIR, "ID-socks5_validproxies.txt")
+    ]:
+        if not os.path.exists(filename):
+            with open(filename, 'w') as f:
+                f.write("No valid proxies found.\n")
+            logger.info(f"Created empty file: {filename}")
+
 async def main():
-    # Inisialisasi
+    # Inisialisasi folder
+    await initialize_dirs()
+    
+    # Inisialisasi semaphore untuk batasi CPU/memori (maks 90%)
     semaphore = asyncio.Semaphore(50)  # Batasi 50 koneksi paralel
     geo_semaphore = asyncio.Semaphore(1)  # Kontrol rate limit geo
     all_proxies = set()
