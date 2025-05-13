@@ -1,11 +1,14 @@
-name: OtoProxy Scrape and Check
+name: OtoProxy HyperScrape
+
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Jalankan setiap 6 jam
-  workflow_dispatch:  # Izinkan jalankan manual
+    - cron: "0 */6 * * *" # Run every 6 hours
+  workflow_dispatch: # Allow manual trigger
+
 jobs:
-  scrape:
+  scrape-proxies:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -13,30 +16,22 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          python-version: "3.8"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run scraper
-        run: python scraper_checker.py
+      - name: Run proxy scraper
+        run: python proxy_storm.py
 
       - name: Commit and push results
         run: |
-          git config user.name "GitHub Action"
-          git config user.email "action@github.com"
-          git add result/ sources.txt || echo "No files to add"
-          git diff --staged --quiet || git commit -m "Update proxy results and sources.txt $(date -u)"
-          git push || echo "No changes to push"
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add proxy/*.txt blacklist.txt
+          git commit -m "Update proxy lists $(date +%Y%m%d_%H%M%S)" || echo "No changes to commit"
+          git push
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
