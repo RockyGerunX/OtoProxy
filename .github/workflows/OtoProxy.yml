@@ -19,14 +19,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install aiohttp aiohttp_socks aiodns beautifulsoup4 requests
+          pip install -r requirements.txt
 
       - name: Run scraper
         run: python scraper_checker.py
@@ -35,8 +35,8 @@ jobs:
         run: |
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
-          git add result/
-          git commit -m "Update proxy results $(date -u)" || echo "No changes to commit"
-          git push
+          git add result/ || echo "No files to add in result/"
+          git diff --staged --quiet || git commit -m "Update proxy results $(date -u)"
+          git push || echo "No changes to push"
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
