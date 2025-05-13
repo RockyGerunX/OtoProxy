@@ -55,13 +55,13 @@ class ProxyScraper:
     def __init__(self):
         self.sources = self.load_sources()
         self.session = None
-        self.max_connections = 500
+        self.max_connections = 1000
         self.semaphore = asyncio.Semaphore(self.max_connections)
         self.ip_pattern = re.compile(r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$')
         self.seen_proxies = set()
         self.cache = Cache(CACHE_DIR, size_limit=int(1e9), ttl=1800)
         self.latency_limit = 1500
-        self.batch_size = 1000  # Disesuaikan untuk 90% penggunaan CPU/RAM
+        self.batch_size = 2000  # Disesuaikan untuk 90% penggunaan CPU/RAM
         self.blacklist = self.load_blacklist()
 
     async def __aenter__(self):
