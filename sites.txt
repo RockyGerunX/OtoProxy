@@ -5,6 +5,5 @@ https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
 https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt
 https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
 https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt
-https://raw.githubusercontent.com/proxy4parsing/proxy-list/main/http.txt
 https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all
 https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-https.txt
