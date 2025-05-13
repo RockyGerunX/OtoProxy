@@ -13,28 +13,24 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Konfigurasi
-TIMEOUT = 10  # Timeout untuk checking proxy
-GEO_API_URL = "http://ip-api.com/json/{}"
-GEO_RATE_LIMIT = 30  # 30 proxy per menit
+SCRAPE_TIMEOUT = 3  # Timeout untuk scraping
+CHECK_TIMEOUT = 7  # Timeout untuk checking proxy
 TEST_URL = "http://httpbin.org/ip"  # Situs untuk tes proxy
 OUTPUT_DIR = "result"
-ID_DIR = os.path.join(OUTPUT_DIR, "ID")
-
-# Regex untuk deteksi IP:Port
 PROXY_REGEX = re.compile(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})')
 
 async def fetch_url(session, url, semaphore):
     async with semaphore:
         try:
-            async with session.get(url, timeout=5) as response:
+            async with session.get(url, timeout=SCRAPE_TIMEOUT) as response:
                 if response.status == 200:
-                    return await response.text()
+                    return await response.text(), True
                 else:
                     logger.error(f"Failed to fetch {url}: Status {response.status}")
-                    return None
+                    return None, False
         except Exception as e:
             logger.error(f"Error fetching {url}: {e}")
-            return None
+            return None, False
 
 async def parse_proxies(html):
     proxies = set()
@@ -62,31 +58,20 @@ async def check_proxy(session, proxy, protocol, semaphore):
         try:
             if protocol == "http":
                 proxy_url = f"http://{proxy}"
-                async with session.get(TEST_URL, proxy=proxy_url, timeout=TIMEOUT) as response:
+                async with session.get(TEST_URL, proxy=proxy_url, timeout=CHECK_TIMEOUT) as response:
                     if response.status == 200:
                         latency = response.connection.transport.get_extra_info('latency', 0)
                         return protocol, latency
             else:
                 connector = ProxyConnector.from_url(f"{protocol}://{proxy}")
                 async with aiohttp.ClientSession(connector=connector) as socks_session:
-                    async with socks_session.get(TEST_URL, timeout=TIMEOUT) as response:
+                    async with socks_session.get(TEST_URL, timeout=CHECK_TIMEOUT) as response:
                         if response.status == 200:
                             latency = response.connection.transport.get_extra_info('latency', 0)
                             return protocol, latency
             return None, None
         except Exception:
             return None, None
-
-async def check_geo(ip, session, semaphore):
-    async with semaphore:
-        try:
-            async with session.get(GEO_API_URL.format(ip), timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get('countryCode') == 'ID'
-                return False
-        except Exception:
-            return False
 
 async def save_proxies(proxies, filename):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -98,20 +83,22 @@ async def save_proxies(proxies, filename):
                 f.write(f"{proxy}\n")
     logger.info(f"Saved {len(proxies)} proxies to {filename}")
 
+async def update_sources(urls, valid_urls):
+    """Hapus URL yang error dari sources.txt."""
+    with open('sources.txt', 'w') as f:
+        for url in urls:
+            if url in valid_urls:
+                f.write(f"{url}\n")
+    logger.info(f"Updated sources.txt with {len(valid_urls)} valid URLs")
+
 async def initialize_dirs():
-    """Buat folder result/ dan result/ID/ jika belum ada."""
+    """Buat folder result/ dan file kosong default."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    os.makedirs(ID_DIR, exist_ok=True)
-    # Buat file kosong default untuk mencegah error git add
     for filename in [
         os.path.join(OUTPUT_DIR, "all_validproxies.txt"),
         os.path.join(OUTPUT_DIR, "http_validproxies.txt"),
         os.path.join(OUTPUT_DIR, "socks4_validproxies.txt"),
-        os.path.join(OUTPUT_DIR, "socks5_validproxies.txt"),
-        os.path.join(ID_DIR, "ID-all_validproxies.txt"),
-        os.path.join(ID_DIR, "ID-http_validproxies.txt"),
-        os.path.join(ID_DIR, "ID-socks4_validproxies.txt"),
-        os.path.join(ID_DIR, "ID-socks5_validproxies.txt")
+        os.path.join(OUTPUT_DIR, "socks5_validproxies.txt")
     ]:
         if not os.path.exists(filename):
             with open(filename, 'w') as f:
@@ -122,9 +109,8 @@ async def main():
     # Inisialisasi folder
     await initialize_dirs()
     
-    # Inisialisasi semaphore untuk batasi CPU/memori (maks 90%)
-    semaphore = asyncio.Semaphore(50)  # Batasi 50 koneksi paralel
-    geo_semaphore = asyncio.Semaphore(1)  # Kontrol rate limit geo
+    # Inisialisasi semaphore untuk kecepatan maksimal (batasi CPU/memori ~90%)
+    semaphore = asyncio.Semaphore(100)  # 100 koneksi paralel
     all_proxies = set()
     
     # Baca sources.txt
@@ -137,20 +123,26 @@ async def main():
         return
     
     # Scrape proxies
-    async with aiohttp.ClientSession() as session:
+    valid_urls = set()
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=100)) as session:
         tasks = [fetch_url(session, url, semaphore) for url in urls]
-        htmls = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        for html in htmls:
-            if html:
+        for url, (html, success) in zip(urls, results):
+            if success and html:
+                valid_urls.add(url)
                 proxies = await parse_proxies(html)
                 all_proxies.update(proxies)
+    
+    # Update sources.txt (hapus URL error)
+    if valid_urls:
+        await update_sources(urls, valid_urls)
     
     logger.info(f"Found {len(all_proxies)} unique proxies after deduplication")
     
     # Cek proxy
     valid_proxies = {'http': [], 'socks4': [], 'socks5': []}
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=100)) as session:
         for proxy in all_proxies:
             tasks = [
                 check_proxy(session, proxy, 'http', semaphore),
@@ -172,27 +164,6 @@ async def main():
     
     await save_proxies(all_valid, os.path.join(OUTPUT_DIR, "all_validproxies.txt"))
     logger.info(f"Total valid proxies: {len(all_valid)}")
-    
-    # Cek geo untuk proxy valid
-    id_proxies = {'http': [], 'socks4': [], 'socks5': []}
-    async with aiohttp.ClientSession() as session:
-        for proxy in all_valid:
-            ip = proxy.split('|')[0].strip()
-            await asyncio.sleep(60 / GEO_RATE_LIMIT)  # Rate limit ip-api.com
-            if await check_geo(ip, session, geo_semaphore):
-                for protocol in valid_proxies:
-                    if proxy in valid_proxies[protocol]:
-                        id_proxies[protocol].append(proxy)
-                        break
-    
-    # Simpan proxy Indonesia
-    id_all_valid = []
-    for protocol, proxies in id_proxies.items():
-        id_all_valid.extend(proxies)
-        await save_proxies(proxies, os.path.join(ID_DIR, f"ID-{protocol}_validproxies.txt"))
-    
-    await save_proxies(id_all_valid, os.path.join(ID_DIR, "ID-all_validproxies.txt"))
-    logger.info(f"Total Indonesia proxies: {len(id_all_valid)}")
 
 if __name__ == "__main__":
     asyncio.run(main())
