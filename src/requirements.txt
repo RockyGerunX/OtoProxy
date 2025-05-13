@@ -1,4 +1,0 @@
-# requirements.txt
-aiohttp>=3.9.0
-aiohttp-socks>=0.8.0
-beautifulsoup4>=4.12.0
