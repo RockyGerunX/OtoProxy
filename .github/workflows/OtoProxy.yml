@@ -1,33 +1,42 @@
-name: OtoProxy
+name: OtoProxy Scrape and Check
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Setiap 6 jam
-  workflow_dispatch:
-
+    - cron: '0 */6 * * *'  # Jalankan setiap 6 jam
+  workflow_dispatch:  # Izinkan jalankan manual
 jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
-          pip install -r src/requirements.txt
+          python -m pip install --upgrade pip
+          pip install aiohttp aiohttp_socks aiodns beautifulsoup4 requests
 
-      - name: Run Scraper
-        run: python src/scraper.py
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      - name: Run scraper
+        run: python scraper_checker.py
 
-      - name: Commit Results
+      - name: Commit and push results
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git add live-proxy/
-          git commit -m "Update proxy lists [auto]"
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add result/
+          git commit -m "Update proxy results $(date -u)" || echo "No changes to commit"
           git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
