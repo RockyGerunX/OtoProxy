@@ -8,7 +8,7 @@ import time
 import logging
 from datetime import datetime
 from diskcache import Cache
-from typing import List, Set
+from typing import List, Set, Tuple # Explicitly include Tuple
 
 # Konfigurasi logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -153,7 +153,7 @@ class ProxyScraper:
             async with self.session.get(url, timeout=3) as response:
                 if response.status == 200:
                     content = await response.text()
-                    for line in f:
+                    for line in content.splitlines():  # Fixed: Changed from f to content
                         if ':' in line:
                             try:
                                 ip, port = line.strip().split(':')
@@ -201,7 +201,7 @@ class ProxyScraper:
                 continue
         return False
 
-    async def verify_proxies(self, proxies: List[Proxy]) -> tuple[List[Proxy], List[str]]:
+    async def verify_proxies(self, proxies: List[Proxy]) -> Tuple[List[Proxy], List[str]]:
         verified = []
         invalid = []
         total = len(proxies)
@@ -248,7 +248,6 @@ class ProxyScraper:
             self.session = None
 
     def save_proxies(self, proxies: List[Proxy], invalid_proxies: List[str]):
-        # Buat file output
         all_proxies = []
         http_proxies = []
         socks4_proxies = []
@@ -264,7 +263,6 @@ class ProxyScraper:
             elif proxy.protocol == 'socks5':
                 socks5_proxies.append(proxy_str)
 
-        # Simpan ke file
         for filename, data in [
             ('all-proxies.txt', all_proxies),
             ('http-proxies.txt', http_proxies),
