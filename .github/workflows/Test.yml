@@ -22,12 +22,21 @@ jobs:
             echo "GH_TOKEN is set"
           fi
 
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Check GitHub Token Permissions
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           echo "Checking GH_TOKEN permissions for RockyGerunX/OtoProxy"
           RESPONSE=$(curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/RockyGerunX/OtoProxy)
+          if [ -z "$RESPONSE" ]; then
+            echo "Error: Empty response from GitHub API"
+            exit 1
+          fi
           if echo "$RESPONSE" | grep -q '"message": "Bad credentials"'; then
             echo "Error: GH_TOKEN is invalid or expired"
             exit 1
@@ -36,11 +45,13 @@ jobs:
             echo "Error: Repository RockyGerunX/OtoProxy not found or inaccessible"
             exit 1
           fi
-          if echo "$RESPONSE" | grep -q '"permissions":.*"push": true'; then
+          PUSH_PERMISSION=$(echo "$RESPONSE" | jq -r '.permissions.push')
+          echo "Push permission: $PUSH_PERMISSION"
+          if [ "$PUSH_PERMISSION" = "true" ]; then
             echo "GH_TOKEN has write (push) access to the repository"
           else
             echo "Error: GH_TOKEN lacks write (push) access to the repository"
-            echo "API Response: $RESPONSE"
+            echo "Full API Response: $RESPONSE"
             exit 1
           fi
 
@@ -59,4 +70,3 @@ jobs:
           git add test.txt
           git commit -m "Test commit to verify GH_TOKEN permissions"
           git push https://x-access-token:$GH_TOKEN@github.com/RockyGerunX/OtoProxy.git
-        continue-on-error: false
