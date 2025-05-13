@@ -3,6 +3,7 @@ name: OtoProxy Workflow
 on:
   schedule:
     - cron: '0 */6 * * *' # Setiap 6 jam
+  workflow_dispatch: # Memungkinkan trigger manual
   push:
     branches:
       - main
@@ -83,6 +84,8 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+          git pull --rebase origin main
           git add all-proxies.txt http-proxies.txt socks4-proxies.txt socks5-proxies.txt blacklist.txt
           git commit -m "Update proxy lists $(date +%Y%m%d_%H%M%S)" || echo "No changes to commit"
           git push https://x-access-token:$GH_TOKEN@github.com/RockyGerunX/OtoProxy.git
+        continue-on-error: false
